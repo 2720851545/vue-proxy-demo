@@ -1,0 +1,125 @@
+<html>
+<head>
+    <style>
+        #app {
+            text-align: center;
+            margin-top: 300px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <input type="text" v-model="num">
+    <button v-click="addList">添加</button>
+    <br>
+    输入内容:
+    <div><span v-text="num"></span></div>
+</div>
+
+<script>
+
+    // DOM和字段双向绑定关系类
+    class Watcher {
+        constructor(node, attr, data, p) {
+            this.node = node
+            this.attr = attr
+            this.data = data
+            this.p = p
+        }
+
+        //更新DOM 内容
+        update() {
+            this.node[this.attr] = this.data[this.p]
+        }
+
+    }
+
+    class ProxyVue {
+
+        //Watcher观察者列表 key为数据键名
+        subscribe = {}
+
+        constructor(options) {
+            this.$options = options || {}
+            this.observe(options.data || {})
+            this.compile(options.el)
+        }
+
+        observe(data) {
+            var that = this
+
+            this.$data = new Proxy(data, {
+                set(target, p, value, receiver) {
+                    let res = Reflect.set(target, p, value, receiver)
+
+                    // 修改数据时, 通知所有和该字段绑定的DOM更新
+                    var subscribe = (that.subscribe[p] || (that.subscribe[p] = []))
+                    subscribe.map(item => item.update())
+
+                    return res;
+                }
+            })
+        }
+
+        compile(el) {
+            const nodes = document.querySelector(el).children
+            var data = this.$data
+
+            this._compile(nodes, data)
+
+        }
+
+        _compile(nodes, data) {
+            nodes = Array.from(nodes)
+
+            nodes.map(node => {
+
+                if (node.children.length > 0) {
+                    this._compile(node.children, data)
+                }
+
+                if (node.hasAttribute('v-text')) {
+                    var p = node.getAttribute('v-text')
+                    //添加观察者
+                    this.publish(new Watcher(node, 'innerText', data, p))
+                }
+
+
+                if (node.hasAttribute('v-model')) {
+                    var p = node.getAttribute('v-model')
+
+                    node.addEventListener('input', (e) => {
+                        //修改数据, 触发proxy.set --> subscribeArray update
+                        data[p] = e.target.value
+                    })
+
+                    node.value = data[p]
+                }
+
+
+            })
+        }
+
+        publish(watcher) {
+            if (!this.subscribe[watcher.p]) {
+                this.subscribe[watcher.p] = []
+            }
+
+            this.subscribe[watcher.p].push(watcher)
+        }
+    }
+
+
+    window.onload = function () {
+        var proxyVue = new ProxyVue({
+            el: '#app'
+            , data: {
+                num: 0
+            }
+        })
+    }
+
+</script>
+</body>
+</html>
